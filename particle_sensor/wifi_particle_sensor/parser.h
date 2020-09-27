@@ -1,0 +1,1 @@
+bool parseReadAck(unsigned char* data, int size, unsigned int* p1, unsigned int* p2_5, unsigned int* p4, unsigned int* p10);
