@@ -16,6 +16,8 @@ ESP8266WebServer server(80);
 bool hasError = false;
 #define STATUS_LED 2
 
+bool isAuto = true;
+
 char respBuf[16];
 int respBufIndex = 0;
 
@@ -38,13 +40,48 @@ void handleNotFound() {
   server.send(404, "text/plain", message);
 }
 
-void SendCmd(const char * cmdBuf, unsigned int cmdSize) {
-  //Send command
+void SendCmdRaw(const char * cmdBuf, unsigned int cmdSize) {
   unsigned int index = 0;
   for (index = 0; index < cmdSize; index++) {
     Serial.write(cmdBuf[index]);
   }
   Serial.flush();
+}
+
+/* NOTE: this shouldn't be used for commands that expect
+ * data as response, this is because it looks for a positive 
+ * ACK packet. If one is not received it repeats the command.
+ */
+void SendCmd(const char * cmdBuf, unsigned int cmdSize, int repeat = 0) {
+  // Clear Serial.
+  while (Serial.available() > 0) {
+    Serial.read();
+  }
+  
+  // Send command
+  SendCmdRaw(cmdBuf, cmdSize);
+
+  // Expect a positive ACK.
+  char first = Serial.read();
+  char second = Serial.read();
+  respBuf[respBufIndex] = first;
+  respBufIndex++;
+  if (respBufIndex > 15) {
+    respBufIndex = 0;
+  }
+  if (first != '\xA5' && second != '\xA5') { // Some lee way here. Both should be A5 really.
+    delay(100);
+    if (repeat > 5) {
+      return;
+    }
+    SendCmd(cmdBuf, cmdSize, repeat+1);
+  }
+}
+
+void DisableAutoMode() {
+  const char cmd[] = {0x68, 0x01, 0x20, 0x77};
+  SendCmd(cmd, 4);
+  isAuto = false;
 }
 
 void setup(void) {
@@ -83,15 +120,35 @@ void setup(void) {
     server.send(200, "text/plain", "sent data to HPM to stop particle measurement");
   });
 
+  server.on("/read", []() {
+    const char cmd[] = {0x68, 0x01, 0x04, 0x93};
+    SendCmdRaw(cmd, 4);
+    server.send(200, "text/plain", "sent data to HPM to read metrics");
+  });
+
+  server.on("/autooff", []() {
+    DisableAutoMode();
+    server.send(200, "text/plain", "sent data to HPM to stop auto sends");
+  });
+
+  server.on("/metrics", []() {
+    if (isAuto) {
+      // We need to disable auto mode first.
+      DisableAutoMode();
+      server.send(500, "text/plain", "HPM needs init.");
+    }
+    
+    // TODO: Return prometheus-style metrics for stored PM values.
+  });
+
   server.on("/data", []() {
     String hexstring = "";
 
-    for(int i = 0; i < 16; i++) {
-      if(respBuf[i] < 0x10) {
-        hexstring += '0';
-      }
+    for (int i = 0; i < 16; i++) {
+      hexstring += "0x";
   
       hexstring += String(respBuf[i], HEX);
+      hexstring += " ";
     }
     server.send(200, "text/plain", hexstring);
   });
@@ -122,13 +179,15 @@ void loop(void) {
 
   if (Serial.available() > 0) {
     char byt = Serial.read();
-    respBuf[respBufIndex] = byt;
-    digitalWrite(2, LOW); //ON
-    delay(20);
-    digitalWrite(2, HIGH);
-    respBufIndex++;
-    if (respBufIndex > 15) {
-      respBufIndex = 0;
+//    respBuf[respBufIndex] = byt;
+    if (byt == '\x42') {
+      digitalWrite(2, LOW); //ON
+      delay(20);
+      digitalWrite(2, HIGH);
     }
+//    respBufIndex++;
+//    if (respBufIndex > 15) {
+//      respBufIndex = 0;
+//    }
   }
 }
