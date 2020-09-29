@@ -160,20 +160,22 @@ void setup(void) {
       server.send(500, "text/plain", "HPM needs init.");
       return;
     }
+    // TODO: Compare to https://aqicn.org/city/london/
+    // Also good https://en.wikipedia.org/wiki/Particulates#European_Union
     String result = "";
-    result += "# HELP hpm_pollution_pm1 Particulate matter with a diameter of 1.0μm or less.\n";
+    result += "# HELP hpm_pollution_pm1 Particulate matter with a diameter of 1.0μm or less (μg per cubic metre).\n";
     result += "# TYPE hpm_pollution_pm1 gauge\n";
     result += "hpm_pollution_pm1 ";
     result += p1;
-    result += "\n# HELP hpm_pollution_pm25 Particulate matter with a diameter of 2.5μm or less.\n";
+    result += "\n# HELP hpm_pollution_pm25 Particulate matter with a diameter of 2.5μm or less (μg per cubic metre).\n";
     result += "# TYPE hpm_pollution_pm25 gauge\n";
     result += "hpm_pollution_pm25 ";
     result += p2_5;
-    result += "\n# HELP hpm_pollution_pm4 Particulate matter with a diameter of 4μm or less.\n";
+    result += "\n# HELP hpm_pollution_pm4 Particulate matter with a diameter of 4μm or less (μg per cubic metre).\n";
     result += "# TYPE hpm_pollution_pm4 gauge\n";
     result += "hpm_pollution_pm4 ";
     result += p4;
-    result += "\n# HELP hpm_pollution_pm10 Particulate matter with a diameter of 10μm or less.\n";
+    result += "\n# HELP hpm_pollution_pm10 Particulate matter with a diameter of 10μm or less (μg per cubic metre).\n";
     result += "# TYPE hpm_pollution_pm10 gauge\n";
     result += "hpm_pollution_pm10 ";
     result += p10;
