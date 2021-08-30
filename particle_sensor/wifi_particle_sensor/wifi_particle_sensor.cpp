@@ -4,6 +4,8 @@
 #include <ESP8266mDNS.h>
 #include <Ticker.h>
 
+#include "DHT.h"
+
 #include "parser.h"
 
 #ifndef STASSID
@@ -28,6 +30,15 @@ int packetReadSize = -1; // -1 when haven't seen 0x40
 unsigned int p1, p2_5, p4, p10 = 0;
 unsigned int parseFails = 0;
 Ticker dataReadTimer;
+
+#define DHTPIN D2
+#define DHTTYPE DHT11
+DHT dht(DHTPIN, DHTTYPE);
+bool needsDhtRead = false;
+unsigned int dhtFails = 0;
+float currentHumidity = NAN;
+float currentTemperature = NAN;
+float currentHeatIndex = NAN;
 
 void handleRoot() {
   server.send(200, "text/plain", "hello from esp8266!");
@@ -72,7 +83,7 @@ void SendCmd(const char * cmdBuf, unsigned int cmdSize, int repeat = 0) {
   // Expect a positive ACK.
   char first = Serial.read();
   char second = Serial.read();
-  if (first != '\xA5' && second != '\xA5') { // Some lee way here. Both should be A5 really.
+  if (first != '\xA5' && second != '\xA5') {
     delay(100);
     if (repeat > 5) {
       return;
@@ -111,6 +122,7 @@ void setup(void) {
 
   dataReadTimer.attach(10.0, []() {
     SendReadRequest();
+    needsDhtRead = true;
   });
   
   WiFi.mode(WIFI_STA);
@@ -183,6 +195,24 @@ void setup(void) {
     result += "# TYPE hpm_parse_failures counter\n";
     result += "hpm_parse_failures ";
     result += parseFails;
+    if (!isnan(currentTemperature)) {
+      result += "\n# HELP hpm_temperature Current room temperature in Celsius.\n";
+      result += "# TYPE hpm_temperature gauge\n";
+      result += "hpm_temperature ";
+      result += currentTemperature;
+    }
+    if (!isnan(currentHumidity)) {
+      result += "\n# HELP hpm_humidity Current room humidity in percent.\n";
+      result += "# TYPE hpm_humidity gauge\n";
+      result += "hpm_humidity ";
+      result += currentHumidity;
+    }
+    if (!isnan(currentHeatIndex)) {
+      result += "\n# HELP hpm_heat_index Current room heat index in Celsius.\n";
+      result += "# TYPE hpm_heat_index gauge\n";
+      result += "hpm_heat_index ";
+      result += currentHeatIndex;
+    }
     server.send(200, "text/plain", result);
   });
 
@@ -201,6 +231,8 @@ void setup(void) {
   server.onNotFound(handleNotFound);
 
   server.begin();
+
+  dht.begin();
 
   DisableAutoMode();
   digitalWrite(2, HIGH); // Turn off LED.
@@ -246,6 +278,18 @@ void loop(void) {
     if (packetReadSize > 16) {
       packetReadSize = -1;
       ParseReadResult();
+    }
+  }
+
+  if (needsDhtRead) {
+    currentHumidity = dht.readHumidity();
+    // Read temperature as Celsius (the default)
+    currentTemperature = dht.readTemperature();
+    if (isnan(currentHumidity) || isnan(currentTemperature)) {
+      dhtFails++;
+    } else {
+      // Compute heat index in Celsius (isFahreheit = false)
+      currentHeatIndex = dht.computeHeatIndex(currentTemperature, currentHumidity, false);
     }
   }
 }
